@@ -1,0 +1,10 @@
+{:paths ["src"]
+ :deps {compojure/compojure {:mvn/version "1.7.1"}
+        org.clojure/core.async {:mvn/version "1.6.681"}
+        org.clojure/data.json {:mvn/version "2.5.0"}
+        lambdaisland/uri {:mvn/version "1.19.155"}
+        ring/ring-core {:mvn/version "1.12.1"}
+        ring/ring-jetty-adapter {:mvn/version "1.12.1"}
+        hiccup/hiccup {:mvn/version "2.0.0-RC3"}
+        org.clojure/java.jdbc {:mvn/version "0.7.8"}
+        org.xerial/sqlite-jdbc {:mvn/version "3.46.0.0"}}}
