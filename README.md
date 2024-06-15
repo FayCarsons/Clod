@@ -4,6 +4,8 @@ It has a minimal Redis-inspired KV-store implmentation for session management an
 SQLite for storing Users and their 'tasks', Hiccup for templating, and a Ring+Compojure REST API 
 to glue it all together.
 
+I don't know why I named it Clod.
+
 On opening, you will be greeted with a login page, log in and start adding, editing, and removing 'tasks'. 
 A session cookie will be created so you (shouldn't) have to login again for 10 minutes.
 
