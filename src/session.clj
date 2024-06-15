@@ -15,6 +15,8 @@
 
 (defn content-type [type]
   {"Content-Type" type})
+ 
+(defn default-client [] (clod/map->Client {:host KV-HOST :port KV-PORT}))
 
 (def hashkeys (atom (transient {})))
 (defn hash-pass [x]
@@ -41,7 +43,7 @@
   (let [user (some-> {:id id}
                      map->User
                      .fetch)
-        client (clod/map->Client {:host "localhost" :port KV-PORT})]
+        client (default-client)]
     (try (when (and user
                     (= "active"
                        (.get-val client (:username user))))
@@ -65,13 +67,17 @@
   (when (pred x)
     x))
 
-(defn -user-page [id]
+(defn -tasks [id]
+  (when debug?
+    (println "Rendering task-manager page!\n Responding with static HTML: \n" (take 64 user-tasks)))
   (if-some [user
             (-> {:id id}
                 map->User
                 .fetch
-                (some-if #(comp not :failure)))]
-    (user-tasks user)
+                (some-if (comp not :failure)))]
+    {:status 200 
+     :headers (content-type "text/html")
+     :body user-tasks}
     {:status 200
      :headers (content-type "application/html")
      :body (str "<h1>User: " id " not found</h1>")}))
@@ -94,8 +100,7 @@
            :body (pr-str (or err
                              {:failure "Invalid user map"}))})
       (let [{:keys [id] :as user} user
-            client (clod/map->Client {:host KV-HOST
-                                      :port KV-PORT})
+            client (default-client)
             url (str "/profile/" id)]
         (when debug?
           (pprint/pprint {"User map" user
@@ -114,48 +119,89 @@
                map->User
                .fetch
                .fetch-tasks
-               json/write-str
+               render-table
                (assoc {:status 200
-                       :headers (content-type "application/json")}
+                       :headers (content-type "text/html")}
                       :body))
       (bad-request (str "No tasks for user " id))))
+
+(defn log [label x]
+  (println label)
+  (pprint/pprint x)
+  x)
 
 (defn -create-task [req]
   (let [task (-> req
                  body-string
                  json/read-str
-                 map->Task)
-        user-id (get-in req [:params :user-id])
+                 map->Task
+                 ( (partial log "Task: ") ))
+        user-id (log "User-id" (get-in req [:params :user-id]) )
         task (assoc task :user user-id)
-        client (clod/map->Client {:host KV-HOST :port KV-PORT})
-        tasks-id (id->tasks user-id)
+        client (default-client)
+        tasks-id (log "KV tasks entry ID: " (id->tasks user-id) )
         other-tasks (->> tasks-id
                          (.get-val client)
                          read-string)]
     (if-let [err (:failure other-tasks)]
-      (if (= "Not found" err)
+      (if (= nil err)
         (.set-val client tasks-id [task])
         (bad-request err))
-      (if (vector? other-tasks)
-        (let [new-tasks (conj other-tasks task)
+      (if (map? other-tasks)
+        (let [new-tasks (assoc other-tasks (:id task) task)
               template (render-table new-tasks)
               response (.set-val client tasks-id new-tasks)]
           (if (= "OK" response)
             {:status 200
-             :headers (content-type "application/json")
-             :body (json/write-str {:html template})}
+             :headers (content-type "text/html")
+             :body template}
             {:status 500
              :headers (content-type "application/json")
              :body (json/write-str (read-string response))}))
         {:status 500
-         :body "Unknown error: invalid task vector"}))))
+         :body "Unknown error: invalid task map"}))))
 
 (defn -update-task [req]
   (let [task-id (get-in req [:params :task-id])
         task (-> req
                  body-string
                  json/read-str
-                 map->Task)]))
+                 map->Task)
+        user-id (get-in req [:cookies "authentication"])
+        tasks-id (id->tasks user-id)
+        client (default-client)
+        old-tasks (->  tasks-id
+                       (.get-val client)
+                       read-string)]
+    (if (map? old-tasks)
+      (let [updated (assoc old-tasks task-id task)
+            response (.set-val client tasks-id updated)
+            template (render-table (vals updated))]
+        (if (= "OK" response)
+          {:status 200
+           :headers (content-type "text/html")
+           :body template}
+          {:status 500
+           :body (-> response
+                     read-string
+                     json/write-str)}))
+      (bad-request "User has no tasks"))))
+
+(defn -remove-task [req]
+  (let [task-id (get-in req [:params :task-id])
+        user-id (get-in req [:cookies "authentication"])
+        tasks-id (id->tasks user-id)
+        client (default-client)
+        old-tasks (.get-val client tasks-id)]
+    (if (map? old-tasks)
+      (let [new-tasks (dissoc old-tasks task-id)
+            response (.set-val client tasks-id new-tasks)]
+        (if (= response "OK")
+          {:status 200
+           :headers (content-type "text/html")
+           :body (render-table new-tasks)}
+          (bad-request response)))
+      (bad-request "User has no tasks"))))
 
 (defn normalize-headers [handler]
   (fn [request]
@@ -180,11 +226,11 @@
   (-> (routes
        (GET "/" req (-handle-root req))
        (POST "/users" req (-create-user req))
-       (GET "/profile/:id" [id]  (-user-page id))
+       (GET "/profile/:id" [id]  (-tasks id))
        (GET "/tasks/:user-id" [user-id] (-fetch-tasks user-id))
        (POST "/tasks/:user-id" req (-create-task req))
        (PUT "/tasks/:task-id" req (-update-task req))
-       (DELETE "/tasks/:id" [id] (-remove-task id))
+       (DELETE "/tasks/:id" req (-remove-task req))
        (route/not-found {:status 404
                          :headers (content-type "text/html")}))
       wrap-cookies

@@ -61,7 +61,7 @@
       (do (swap! db dissoc! k) 
           {:failure "Expired"})
       (or (:inner entry) entry))
-    {:failure "Not found"})) 
+    {:failure nil})) 
 
 (defn set-entry! [db k v] (swap! db assoc! k v) nil)
 
@@ -73,7 +73,7 @@
    (if-let [entry (get @db k)]
      (do (swap! db assoc! k (assoc entry :expires (timestamp seconds)))
          nil)
-     {:failure "Not found"})))
+     {:failure nil})))
 
 (def pattern #"\[[^\]]*\]|\{[^\}]*\}|\([^\)]*\)|\S+")
 

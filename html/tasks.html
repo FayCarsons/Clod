@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        #table-root {
+            margin-top: 1rem;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        button {
+            padding: 6px 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="tasks-header"></h1>
+
+    <form id="add-task-form">
+        <label for="task-desc">Description:</label>
+        <input type="text" id="task-desc" name="description" required>
+
+        <label for="task-status">Status:</label>
+        <select id="task-status" name="status" required>
+            <option value="pending">Pending</option>
+            <option value="in-progress">In Progress</option>
+            <option value="finished">Finished</option>
+        </select>
+
+        <button type="submit">Add Task</button>
+    </form>
+
+    <!-- Sends a request to store all tasks in DB -->
+    <button onclick="saveAllTasks()">Save All Tasks</button>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="tasks-root">
+            <!-- Tasks will be dynamically added here -->
+        </tbody>
+    </table>
+
+    <script>
+        function getUserId() {
+            const path = window.location.pathname.split('/')
+
+            const id = parseInt(path[path.length - 1])
+
+            if (isNaN(id)) alert('Invalid user id or path')
+            else return id
+        }
+
+        async function fetchTasks() {
+            const id = getUserId()
+            try {
+                const req = await fetch(`/tasks/${id}`, { method: "GET" });
+                const res = await req.text();
+                return res;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        const action = {
+            Create: 0,
+            Update: 1,
+            Delete: 2,
+        };
+
+        const tasks = [];
+
+        function updateTable(inner) {
+            const root = document.getElementById("tasks-root");
+            root.innerHTML = inner;
+        }
+
+        async function createTask({ description, status }) {
+            const id = getUserId()
+            try {
+                const req = await fetch(`/tasks/${id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ description, status }),
+                });
+                const res = await req.text();
+
+                updateTable(res);
+            } catch (err) {
+                alert(err);
+            }
+        }
+
+        async function updateTask({ id, description, status }) {
+            try {
+                const task = { id, description, status };
+                const req = await fetch(`/tasks/${task.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(task),
+                });
+
+                const res = await req.text();
+
+                updateTable(res);
+            } catch (err) {
+                alert(err);
+            }
+        }
+
+        async function deleteTask({ id }) {
+            try {
+                const req = await fetch("/tasks/:id", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                });
+
+                const res = await req.text();
+
+                updateTable(res);
+            } catch (err) {
+                alert(err);
+            }
+        }
+
+        async function saveAllTasks() {
+            const req = await fetch(`/tasks/save/${getUserId()}`, {
+                method: 'PUT',
+            })
+
+            if (req.status != 200) alert(await req.text())
+            // TODO: Handle errors
+        }
+        async function update(action, data = {}) {
+            await {
+                0: () => createTask(data),
+                1: () => updateTask(data),
+                2: () => deleteTask(data),
+            }[action]();
+        }
+
+        document.getElementById('add-task-form').addEventListener('submit', async e => {
+            e.preventDefault()
+
+            const description = document.getElementById('task-desc').value
+            const status = document.getElementById('task-status').value
+
+            const task = { description, status }
+
+            update(action.Create, task)
+        })
+
+        fetchTasks().then((html) => {
+            if (html) {
+                updateTable(html);
+            }
+        });
+
+
+
+    </script>
+</body>
+
+</html>

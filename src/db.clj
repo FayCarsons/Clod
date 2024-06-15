@@ -23,8 +23,8 @@
 
 (defprotocol UserData
   (store! [this])
-  (alter! [this])
-  (with-id [this] [this])
+  (update! [this])
+  (with-id [this])
   (fetch [this])
   (fetch-tasks [this])
   (delete [this]))
@@ -43,7 +43,8 @@
                  (println err)
                  {:failure err})))
         {:failure (str "Invalid task: " this)})))
-  (alter! [{:keys [id] :as this}]
+  (with-id [this] this)
+  (update! [{:keys [id] :as this}]
     (try (jdbc/update! db :tasks this ["id = ?" id])
          (catch Exception e 
            (let [err (.getMessage e)]
@@ -74,7 +75,7 @@
              (let [err (.getMessage e)]
                (println err)
                {:failure err})))))
-  (alter! [{:keys [id] :as this}]
+  (update! [{:keys [id] :as this}]
     (try (jdbc/update! db :users this ["id = ?" id])
          (catch Exception e
            (let [err (.getMessage e)]
@@ -92,26 +93,30 @@
       (pprint/pprint (pr-str this)))
     (let [id (or id
                  (hash username))]
-      (try (jdbc/query db ["select * from users where id = ?" id])
+      (try (-> (jdbc/query db ["select * from users where id = ?" id])
+               first
+               map->User)
            (catch Exception e
              (println (.getMessage e))
              {:failure (str "User " username "not found")}))))
-  (fetch-tasks [this]
-    (jdbc/query db
-                ["select * 
-                            from tasks 
-                            join users on tasks.user = users.id 
-                            where users.id = ?"
-                 (:id this)]))
+  (fetch-tasks [{id :id}]
+    (or (jdbc/query db
+                    ["select * from tasks where user = ?" id]) []))
   (delete [{id :id}]
-    (try (jdbc/execute! db ["delete from users where (id = ?)" id])
+    (try (jdbc/execute! db ["delete from users where id = ?" id])
          (catch Exception e
            (let [err (.getMessage e)]
              (println err)
              {:failure err})))))
 
-(jdbc/insert! db :users {:id 0 :username "kiggy" :password "testing"})
+(def mock-tasks [{:id 0 :description "doin stuff" :status "in-progress" :user 0}
+                 {:id 1 :description "doin more stuff" :status "pending" :user 0}])
+#_(jdbc/insert-multi! db :tasks mock-tasks)
+#_(-> {:id 0}
+    map->User 
+    .fetch-tasks)
 
+; NOTE: For db initialization in dev
 (defn create-db []
   (try (jdbc/db-do-commands db
                             [(jdbc/create-table-ddl :users
@@ -127,4 +132,5 @@
                                                     {:conditional? true})])
        (catch Exception e
          (println (.getMessage e)))))
+
 (create-db)
