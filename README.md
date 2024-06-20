@@ -1,6 +1,6 @@
 # Clod 
 Simple Clojure backend I wrote to re-familiarize myself with Clojure.
-It has a minimal Redis-inspired KV-store implmentation for session management and caching, 
+It has a minimal Redis-inspired KV-store implementation for session management and caching, 
 SQLite for storing Users and their 'tasks', Hiccup for templating, and a Ring+Compojure REST API 
 to glue it all together.
 
